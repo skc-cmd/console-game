@@ -1,0 +1,436 @@
+#include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include <conio.h>
+#include <windows.h>
+#include <vector>
+#include <string>
+
+using namespace std;
+
+// 方块形状定义
+const int SHAPES[7][4][4] = {
+    // I
+    {
+        {0,0,0,0},
+        {1,1,1,1},
+        {0,0,0,0},
+        {0,0,0,0}
+    },
+    // O
+    {
+        {0,0,0,0},
+        {0,1,1,0},
+        {0,1,1,0},
+        {0,0,0,0}
+    },
+    // T
+    {
+        {0,0,0,0},
+        {0,1,0,0},
+        {1,1,1,0},
+        {0,0,0,0}
+    },
+    // S
+    {
+        {0,0,0,0},
+        {0,1,1,0},
+        {1,1,0,0},
+        {0,0,0,0}
+    },
+    // Z
+    {
+        {0,0,0,0},
+        {1,1,0,0},
+        {0,1,1,0},
+        {0,0,0,0}
+    },
+    // L
+    {
+        {0,0,0,0},
+        {1,0,0,0},
+        {1,1,1,0},
+        {0,0,0,0}
+    },
+    // J
+    {
+        {0,0,0,0},
+        {0,0,1,0},
+        {1,1,1,0},
+        {0,0,0,0}
+    }
+};
+
+class Tetris {
+private:
+    static const int WIDTH = 10;
+    static const int HEIGHT = 20;
+    int board[HEIGHT][WIDTH];
+    int score;
+    int level;
+    int linesCleared;
+    bool gameOver;
+    
+    int currentShape[4][4];
+    int currentX, currentY;
+    int currentType;
+    int nextType;
+    
+    HANDLE hConsole;
+    COORD cursorPos;
+    
+    clock_t lastDrop;
+    int dropInterval;
+
+public:
+    Tetris() {
+        hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        srand((unsigned)time(NULL));
+        initGame();
+        setConsoleSize();
+    }
+
+    // 设置控制台窗口大小
+    void setConsoleSize() {
+        HWND console = GetConsoleWindow();
+        RECT rect;
+        GetWindowRect(console, &rect);
+        
+        MoveWindow(console, rect.left, rect.top, 900, 700, TRUE);
+        
+        COORD bufferSize;
+        bufferSize.X = 100;
+        bufferSize.Y = 30;
+        SetConsoleScreenBufferSize(hConsole, bufferSize);
+        
+        SMALL_RECT windowSize;
+        windowSize.Top = 0;
+        windowSize.Left = 0;
+        windowSize.Bottom = 29;
+        windowSize.Right = 99;
+        SetConsoleWindowInfo(hConsole, TRUE, &windowSize);
+    }
+
+    void initGame() {
+        for (int i = 0; i < HEIGHT; i++) {
+            for (int j = 0; j < WIDTH; j++) {
+                board[i][j] = 0;
+            }
+        }
+        
+        score = 0;
+        level = 1;
+        linesCleared = 0;
+        gameOver = false;
+        dropInterval = 500;
+        
+        currentType = rand() % 7;
+        nextType = rand() % 7;
+        spawnNewBlock();
+        
+        lastDrop = clock();
+    }
+
+    void spawnNewBlock() {
+        currentType = nextType;
+        nextType = rand() % 7;
+        
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                currentShape[i][j] = SHAPES[currentType][i][j];
+            }
+        }
+        
+        currentX = WIDTH / 2 - 2;
+        currentY = 0;
+        
+        if (checkCollision(currentShape, currentX, currentY)) {
+            gameOver = true;
+        }
+    }
+
+    bool checkCollision(int shape[4][4], int x, int y) {
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                if (shape[i][j] != 0) {
+                    int boardX = x + j;
+                    int boardY = y + i;
+                    
+                    if (boardX < 0 || boardX >= WIDTH || boardY >= HEIGHT) {
+                        return true;
+                    }
+                    
+                    if (boardY >= 0 && board[boardY][boardX] != 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    void lockBlock() {
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                if (currentShape[i][j] != 0) {
+                    int boardX = currentX + j;
+                    int boardY = currentY + i;
+                    if (boardY >= 0) {
+                        board[boardY][boardX] = currentType + 1;
+                    }
+                }
+            }
+        }
+        
+        clearLines();
+        spawnNewBlock();
+    }
+
+    void clearLines() {
+        int cleared = 0;
+        for (int i = HEIGHT - 1; i >= 0; ) {
+            bool full = true;
+            for (int j = 0; j < WIDTH; j++) {
+                if (board[i][j] == 0) {
+                    full = false;
+                    break;
+                }
+            }
+            
+            if (full) {
+                for (int k = i; k > 0; k--) {
+                    for (int j = 0; j < WIDTH; j++) {
+                        board[k][j] = board[k-1][j];
+                    }
+                }
+                for (int j = 0; j < WIDTH; j++) {
+                    board[0][j] = 0;
+                }
+                cleared++;
+            } else {
+                i--;
+            }
+        }
+        
+        if (cleared > 0) {
+            linesCleared += cleared;
+            switch(cleared) {
+                case 1: score += 100 * level; break;
+                case 2: score += 300 * level; break;
+                case 3: score += 500 * level; break;
+                case 4: score += 800 * level; break;
+            }
+            
+            level = linesCleared / 10 + 1;
+            dropInterval = max(100, 500 - (level - 1) * 30);
+        }
+    }
+
+    void rotateBlock() {
+        int rotated[4][4];
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                rotated[i][j] = currentShape[3-j][i];
+            }
+        }
+        
+        if (!checkCollision(rotated, currentX, currentY)) {
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    currentShape[i][j] = rotated[i][j];
+                }
+            }
+        }
+    }
+
+    bool moveBlock(int dx, int dy) {
+        if (!checkCollision(currentShape, currentX + dx, currentY + dy)) {
+            currentX += dx;
+            currentY += dy;
+            return true;
+        }
+        
+        if (dy == 1) {
+            lockBlock();
+        }
+        return false;
+    }
+
+    void hardDrop() {
+        while (!checkCollision(currentShape, currentX, currentY + 1)) {
+            currentY++;
+        }
+        lockBlock();
+    }
+
+    void draw() {
+        cursorPos.X = 0;
+        cursorPos.Y = 0;
+        SetConsoleCursorPosition(hConsole, cursorPos);
+        
+        CONSOLE_CURSOR_INFO cursorInfo;
+        GetConsoleCursorInfo(hConsole, &cursorInfo);
+        cursorInfo.bVisible = false;
+        SetConsoleCursorInfo(hConsole, &cursorInfo);
+        
+        // 标题
+        cout << "===========================================";
+        if (gameOver) {
+            cout << "    !!!!! 游戏结束 !!!!!";
+        } else {
+            cout << "      俄罗斯方块                ";
+        }
+        cout << endl;
+        
+        cout << "===========================================";
+        cout << "   得分: " << score << "  等级: " << level << "  行数: " << linesCleared;
+        cout << endl;
+        
+        cout << "-------------------------------------------";
+        if (!gameOver) {
+            cout << "  下一个:";
+        }
+        cout << endl;
+        
+        // 绘制游戏面板（右侧显示下一个方块和游戏结束信息）
+        for (int i = 0; i < HEIGHT; i++) {
+            // 左侧：游戏面板
+            cout << "|";
+            for (int j = 0; j < WIDTH; j++) {
+                bool isCurrentBlock = false;
+                for (int si = 0; si < 4; si++) {
+                    for (int sj = 0; sj < 4; sj++) {
+                        if (currentShape[si][sj] != 0 &&
+                            i == currentY + si &&
+                            j == currentX + sj) {
+                            isCurrentBlock = true;
+                            break;
+                        }
+                    }
+                    if (isCurrentBlock) break;
+                }
+                
+                if (isCurrentBlock || board[i][j] != 0) {
+                    cout << "[]";
+                } else {
+                    cout << "  ";
+                }
+            }
+            cout << "|";
+            
+            // 右侧：显示下一个方块（前4行）或游戏结束信息
+            if (i < 4) {
+                cout << "   ";
+                for (int j = 0; j < 4; j++) {
+                    if (SHAPES[nextType][i][j] != 0) {
+                        cout << "[]";
+                    } else {
+                        cout << "  ";
+                    }
+                }
+            } else if (i == 4 && gameOver) {
+                cout << "  !!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+            } else if (i == 5 && gameOver) {
+                cout << "  !!  游 戏 结 束 ！       !!";
+            } else if (i == 6 && gameOver) {
+                cout << "  !!  最终得分: " << score;
+                for (int k = 0; k < 8 - to_string(score).length(); k++) cout << " ";
+                cout << "!!";
+            } else if (i == 7 && gameOver) {
+                cout << "  !!  按 R 重新开始        !!";
+            } else if (i == 8 && gameOver) {
+                cout << "  !!  按 ESC 退出          !!";
+            } else if (i == 9 && gameOver) {
+                cout << "  !!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+            }
+            
+            cout << endl;
+        }
+        
+        cout << "-------------------------------------------";
+        cout << "  操作: WASD移动  上键旋转  空格落底";
+        cout << endl;
+        cout << "  R重新开始  ESC退出";
+        cout << endl;
+    }
+
+    void run() {
+        while (true) {
+            draw();
+            
+            if (gameOver) {
+                if (_kbhit()) {
+                    char key = _getch();
+                    if (tolower(key) == 'r') {
+                        initGame();
+                    } else if (key == 27) {
+                        return;
+                    }
+                }
+                Sleep(50);
+                continue;
+            }
+            
+            if (_kbhit()) {
+                char key = _getch();
+                if (key == -32) {
+                    key = _getch();
+                    switch (key) {
+                        case 72: rotateBlock(); break;
+                        case 80:
+                            if (moveBlock(0, 1)) {
+                                lastDrop = clock();
+                            }
+                            break;
+                        case 75: moveBlock(-1, 0); break;
+                        case 77: moveBlock(1, 0); break;
+                    }
+                } else {
+                    switch (tolower(key)) {
+                        case 'w': rotateBlock(); break;
+                        case 's':
+                            if (moveBlock(0, 1)) {
+                                lastDrop = clock();
+                            }
+                            break;
+                        case 'a': moveBlock(-1, 0); break;
+                        case 'd': moveBlock(1, 0); break;
+                        case ' ': hardDrop(); break;
+                        case 'r':
+                            initGame();
+                            break;
+                        case 27: return;
+                    }
+                }
+            }
+            
+            clock_t now = clock();
+            int elapsed = (now - lastDrop) * 1000 / CLOCKS_PER_SEC;
+            if (elapsed >= dropInterval) {
+                moveBlock(0, 1);
+                lastDrop = now;
+            }
+            
+            Sleep(30);
+        }
+    }
+};
+
+int main() {
+    system("cls");
+    
+    Tetris game;
+    
+    cout << "===========================================" << endl;
+    cout << "        俄罗斯方块                        " << endl;
+    cout << "===========================================" << endl;
+    cout << "  按任意键开始游戏...                    " << endl;
+    cout << "===========================================" << endl;
+    
+    _getch();
+    system("cls");
+    
+    game.run();
+    
+    return 0;
+}
